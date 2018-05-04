@@ -9,6 +9,7 @@ import (
 
 	"layeh.com/gumble/gumble"
 	"layeh.com/gumble/gumbleopenal"
+	"layeh.com/gumble/gumbleffmpeg"
 	"layeh.com/gumble/gumbleutil"
 	_ "layeh.com/gumble/opus"
 )
@@ -21,6 +22,7 @@ type Barney struct {
 	TLSConfig tls.Config
 
 	Stream *gumbleopenal.Stream
+	FileStream *gumbleffmpeg.Stream
 }
 
 func main() {
@@ -66,6 +68,19 @@ func main() {
 
 		Connect: func(e *gumble.ConnectEvent) {
 			fmt.Printf("Connect.WelcomeMessage: %s\n", *e.WelcomeMessage)
+
+			if (b.FileStream != nil) {
+				return
+			}
+
+			var file string = "sounds/burp.opus"
+			
+			b.FileStream = gumbleffmpeg.New(e.Client, gumbleffmpeg.SourceFile(file))
+			if err := b.FileStream.Play(); err != nil {
+					fmt.Printf("%s\n", err)
+			} else {
+					fmt.Printf("Playing %s\n", file)
+			}
 		},
 
 		Disconnect: func(e *gumble.DisconnectEvent) {
