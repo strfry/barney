@@ -9,6 +9,7 @@ import (
 
 	"layeh.com/gumble/gumble"
 	"layeh.com/gumble/gumbleopenal"
+	"layeh.com/gumble/gumbleutil"
 	_ "layeh.com/gumble/opus"
 )
 
@@ -21,7 +22,6 @@ type Barney struct {
 
 	Stream *gumbleopenal.Stream
 }
-
 
 func main() {
 	// Command line flags
@@ -43,9 +43,6 @@ func main() {
 	b.Config.Username = *username
 	b.Config.Password = *password
 
-	// b.Config.Attach(MyConsolePrintListeners)
-		// How to act on few meaningful events? reconnect/exit
-
 	if *insecure {
 		b.TLSConfig.InsecureSkipVerify = true
 	}
@@ -58,6 +55,27 @@ func main() {
 		b.TLSConfig.Certificates = append(b.TLSConfig.Certificates, cert)
 	}
 
+	// Channel to keep main running until disconnect
+	keepAlive := make(chan bool)
+
+	// Attach Event Handlers
+	b.Config.Attach(gumbleutil.Listener{
+		TextMessage: func(e *gumble.TextMessageEvent) {
+			fmt.Printf("Received text message: %s\n", e.Message)
+		},
+
+		Connect: func(e *gumble.ConnectEvent) {
+			fmt.Printf("Connect.WelcomeMessage: %s\n", *e.WelcomeMessage)
+		},
+
+		Disconnect: func(e *gumble.DisconnectEvent) {
+			keepAlive <- true
+		},
+	})
+
+	b.Config.Attach(gumbleutil.AutoBitrate)
+
+	// Connect to server
 	var err error
 	var client *gumble.Client
 	client, err = gumble.DialWithDialer(new(net.Dialer), b.Address, b.Config, &b.TLSConfig)
@@ -66,15 +84,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Fprintf(os.Stderr, "%s\n", client.Channels)
-	//fmt.Fprintf(os.Stderr, "%s\n", client.AudioEncoder)
+	// TODO: sensible printout of available channels?
+	//fmt.Fprintf(os.Stderr, "%s\n", client.Channels)
 
-	if stream, err := gumbleopenal.New(b.Client); err != nil {
+	// Add Audio Stream
+	if stream, err := gumbleopenal.New(client); err != nil {
 		fmt.Fprintf(os.Stderr, "%s\n", err)
 		os.Exit(1)
 	} else {
 		b.Stream = stream
+		b.Stream.StartSource()
 	}
 
-	for true {}
+	<-keepAlive
 }
